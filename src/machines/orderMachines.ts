@@ -1,5 +1,11 @@
-import { assign, createMachine } from "xstate";
-import type { OrderContestType } from "../utils/types";
+import { assign, createMachine, fromPromise } from "xstate";
+import type { OrderContestType, OrderEvent } from "../utils/types";
+import {
+  checkInventory,
+  scheduleShipping,
+  sendNotification,
+  verifyPayment,
+} from "../services/orderService";
 
 export const orderMachine = createMachine({
   id: "order",
@@ -7,9 +13,14 @@ export const orderMachine = createMachine({
   context: {
     orderId: "ORD-123",
     paymentConfirmed: false,
-    inventaryAvailable: false,
+    inventoryAvailable: false,
     trackingId: undefined,
   } as OrderContestType,
+  types: {
+    context: {} as OrderContestType,
+    events: {} as OrderEvent,
+  },
+
   states: {
     pending: {
       on: {
@@ -20,10 +31,10 @@ export const orderMachine = createMachine({
 
     processingPayment: {
       invoke: {
-        src: "verifyPayment",
+        src: fromPromise(() => verifyPayment()),
         onDone: {
           target: "checkingInventory",
-          actions: assign({ paymentConfirmed: true }),
+          actions: assign({ paymentConfirmed: (_) => true }),
         },
         onError: "failed",
       },
@@ -31,10 +42,10 @@ export const orderMachine = createMachine({
 
     checkingInventory: {
       invoke: {
-        src: "checkInventory",
+        src: fromPromise(() => checkInventory()),
         onDone: {
           target: "shipping",
-          actions: assign({ inventaryAvailable: true }),
+          actions: assign({ inventoryAvailable: (_) => true }),
         },
         onError: "failed",
       },
@@ -42,7 +53,7 @@ export const orderMachine = createMachine({
 
     shipping: {
       invoke: {
-        src: "scheduleShipping",
+        src: fromPromise(() => scheduleShipping()),
         onDone: {
           target: "shipped",
           actions: assign({
@@ -70,7 +81,7 @@ export const orderMachine = createMachine({
           states: {
             sending: {
               invoke: {
-                src: "sendNotification",
+                src: fromPromise(() => sendNotification("Order Shipped")),
                 onDone: "done",
                 onError: "done",
               },
